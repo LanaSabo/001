@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>001 — Aufnahme Testaudio</title>
+<title>MoManufaktur — Aufnahme</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 
   /* ============================================================
@@ -190,6 +191,79 @@
     margin-top: 4vh;
   }
 
+  /* ---------- Fortschrittsbalken ---------- */
+
+  .player {
+    width: min(78vw, 320px);
+    margin-top: 1.8rem;
+    z-index: 2;
+  }
+
+  .progress-track {
+    position: relative;
+    height: 3px;
+    background: var(--line);
+    border-radius: 2px;
+    cursor: pointer;
+    /* größere Tap-Fläche, ohne die sichtbare Höhe zu erhöhen */
+    padding: 8px 0;
+    background-clip: content-box;
+  }
+
+  .progress-fill {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    height: 3px;
+    width: 0%;
+    background: var(--brass);
+    border-radius: 2px;
+  }
+
+  .time-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    color: var(--bone-dim);
+  }
+
+  /* ---------- QR-Code Plakette ---------- */
+
+  .qr-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 3.5vh;
+    z-index: 2;
+  }
+
+  .qr-frame {
+    padding: 10px;
+    background: #f4f1ea;
+    border: 1px solid var(--brass);
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(169,130,76,0.15), 0 0 24px rgba(169,130,76,0.08);
+    line-height: 0;
+  }
+
+  .qr-frame canvas {
+    display: block;
+    width: 128px;
+    height: 128px;
+  }
+
+  .qr-caption {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     canvas#cymatics { animation: none !important; }
   }
@@ -197,8 +271,8 @@
 </head>
 <body>
 
-  <!-- data-edit: Repository-/Objektname -->
-  <div class="edition">001</div>
+  <!-- data-edit: wird automatisch aus dem Repository-/Ordnernamen befüllt -->
+  <div class="edition" id="repoLabel">—</div>
 
   <div class="ring-wrap" id="ringWrap">
     <canvas id="cymatics"></canvas>
@@ -215,11 +289,83 @@
     <h1>Aufnahme Testaudio</h1>
   </div>
 
-  <footer>All Rights reserved by MoManufaktur - Digital www.MoManufaktur.com </footer>
+  <div class="player">
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="time-row">
+      <span id="timeCurrent">0:00</span>
+      <span id="timeDuration">0:00</span>
+    </div>
+  </div>
 
-  <audio id="audio" src="audio.mp3" preload="auto" loop></audio>
+  <div class="qr-wrap">
+    <div class="qr-frame">
+      <canvas id="qrCanvas"></canvas>
+    </div>
+    <div class="qr-caption">Diese Seite</div>
+  </div>
+
+  <footer>MoManufaktur - Digital</footer>
+
+  <audio id="audio" src="audio.mp3" preload="auto"></audio>
 
   <script>
+    /* -----------------------------------------------------------
+       Liest den Repository-/Ordnernamen automatisch aus der URL
+       aus und zeigt ihn als Kennzeichnung + Browser-Tab-Titel an.
+
+       Beispiel: https://lanasabo.github.io/001/  ->  "001"
+       Beispiel: https://lanasabo.github.io/talismane/007/ -> "007"
+       (nimmt den letzten nicht-leeren Pfad-Abschnitt vor der Datei)
+    ------------------------------------------------------------ */
+    (function setLabelFromRepo() {
+      const parts = window.location.pathname
+        .split('/')
+        .filter(p => p.length > 0 && !p.includes('.')); // Dateinamen wie index.html rausfiltern
+
+      const name = parts.length > 0 ? parts[parts.length - 1] : 'MoManufaktur';
+
+      document.getElementById('repoLabel').textContent = name;
+      document.title = `MoManufaktur — ${name}`;
+    })();
+
+    /* -----------------------------------------------------------
+       QR-Code der aktuellen Seiten-URL generieren.
+       Nutzt die Bibliothek "qrcode-generator" (per CDN geladen).
+       Achtung: lokal per file:// geöffnet zeigt der QR die
+       file://-Adresse — funktioniert erst korrekt, sobald die
+       Seite live auf GitHub Pages liegt.
+    ------------------------------------------------------------ */
+    (function renderQR() {
+      const url = window.location.href;
+      const qr = qrcode(0, 'M'); // Typ 0 = automatische Größe, Fehlerkorrektur M
+      qr.addData(url);
+      qr.make();
+
+      const count = qr.getModuleCount();
+      const canvas = document.getElementById('qrCanvas');
+      const dpr = window.devicePixelRatio || 1;
+      const displaySize = 128;
+      const size = displaySize * dpr;
+      const cell = size / count;
+
+      canvas.width = size;
+      canvas.height = size;
+
+      const qctx = canvas.getContext('2d');
+      qctx.fillStyle = '#f4f1ea';
+      qctx.fillRect(0, 0, size, size);
+      qctx.fillStyle = '#141110';
+      for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+          if (qr.isDark(r, c)) {
+            qctx.fillRect(Math.floor(c * cell), Math.floor(r * cell), Math.ceil(cell), Math.ceil(cell));
+          }
+        }
+      }
+    })();
+
     const audio = document.getElementById('audio');
     const canvas = document.getElementById('cymatics');
     const ringWrap = document.getElementById('ringWrap');
@@ -320,9 +466,49 @@
     }
 
     canvas.addEventListener('click', togglePlay);
+
     audio.addEventListener('ended', () => {
-      // loop ist an; falls loop entfernt wird, hier zurücksetzen:
-      playing = false; ringWrap.classList.remove('playing'); //loop ist jetzt AUS
+      // Wiedergabe ist zuende: Zustand zurücksetzen, damit ein
+      // erneutes Antippen wieder von vorn beginnt.
+      playing = false;
+      ringWrap.classList.remove('playing');
+      audio.currentTime = 0;
+      progressFill.style.width = '0%';
+      timeCurrent.textContent = formatTime(0);
+    });
+
+    /* ---------- Fortschrittsbalken ---------- */
+
+    const progressTrack = document.getElementById('progressTrack');
+    const progressFill = document.getElementById('progressFill');
+    const timeCurrent = document.getElementById('timeCurrent');
+    const timeDuration = document.getElementById('timeDuration');
+
+    function formatTime(sec) {
+      if (!isFinite(sec)) return '0:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    audio.addEventListener('loadedmetadata', () => {
+      timeDuration.textContent = formatTime(audio.duration);
+    });
+
+    audio.addEventListener('timeupdate', () => {
+      if (audio.duration) {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        progressFill.style.width = pct + '%';
+      }
+      timeCurrent.textContent = formatTime(audio.currentTime);
+    });
+
+    // Klick/Tap auf den Balken = an diese Stelle springen
+    progressTrack.addEventListener('click', (e) => {
+      if (!audio.duration) return;
+      const rect = progressTrack.getBoundingClientRect();
+      const ratio = (e.clientX - rect.left) / rect.width;
+      audio.currentTime = Math.max(0, Math.min(1, ratio)) * audio.duration;
     });
 
     draw();
